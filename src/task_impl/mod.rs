@@ -3,6 +3,8 @@ use std::prelude::v1::*;
 use std::cell::Cell;
 use std::fmt;
 use std::mem;
+use std::ptr;
+use std::slice;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize, ATOMIC_USIZE_INIT};
 use std::thread;
@@ -20,9 +22,43 @@ mod data;
 pub use self::task_rc::TaskRc;
 pub use self::data::LocalKey;
 
+/// A custom trait object that can clone it's object,
+/// carries the necessary information to make a `UnparkObj`.
+struct UnparkHandle<'a> {
+    obj : &'a [u8],
+    unpark_obj : fn(&[u8]),
+    clone_obj : fn(&[u8]) -> [u8; MAX_OBJ_BYTES],
+    drop_obj : fn(&mut [u8]),
+}
+
+impl<'a> UnparkHandle<'a> {
+    fn make_unpark_obj(&self) -> UnparkObj {
+        UnparkObj {
+            obj : (self.clone_obj)(self.obj),
+            unpark_obj : self.unpark_obj,
+            drop_obj : self.drop_obj,
+        }
+    }
+}
+
+impl<'a, T : Unpark + Clone> From<&'a T> for UnparkHandle<'a> {
+    fn from(unpark : &T) -> Self {
+        let size = mem::size_of::<T>();
+        // Make sure unpark is small enough to fit an `UnparkObj`.
+        if size > MAX_OBJ_BYTES { unimplemented!() }
+        let ptr = unpark as *const _ as *const u8;
+        UnparkHandle {
+            obj : unsafe { slice::from_raw_parts(ptr, size) },
+            drop_obj : call_force_drop::<T>,
+            clone_obj : call_clone::<T>,
+            unpark_obj : call_unpark::<T>
+        }
+    }
+}
+
 struct BorrowedTask<'a> {
     id: usize,
-    unpark: &'a Arc<Unpark>,
+    unpark: UnparkHandle<'a>,
     map: &'a data::LocalMap,
     events: Events,
 }
@@ -81,7 +117,7 @@ fn with<F: FnOnce(&BorrowedTask) -> R, R>(f: F) -> R {
 #[derive(Clone)]
 pub struct Task {
     id: usize,
-    unpark: Arc<Unpark>,
+    unpark: UnparkObj,
     events: Events,
 }
 
@@ -121,7 +157,7 @@ pub fn park() -> Task {
         Task {
             id: task.id,
             events: task.events.clone(),
-            unpark: task.unpark.clone(),
+            unpark: task.unpark.make_unpark_obj(),
         }
     })
 }
