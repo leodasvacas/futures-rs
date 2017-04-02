@@ -152,7 +152,7 @@ impl<'a> UnparkHandle<'a> {
     }
 
     /// Equivalent to 'let arc = Arc::new(unpark); UnparkHandle::by_clone(&arc)'.
-    pub fn boxed<T : Unpark + Sync>(unpark : T) -> UnparkHandle<'static> {
+    pub fn shared<T : Unpark + Sync>(unpark : T) -> UnparkHandle<'static> {
         let arc = Arc::new(unpark);
         UnparkHandle {
             data : Data::Owned(obliviate(arc)),

@@ -13,13 +13,14 @@ use future::BoxFuture;
 mod unpark_mutex;
 use self::unpark_mutex::UnparkMutex;
 mod unpark_handle;
-use self::unpark_handle::{UnparkHandle, UnparkObj};
+use self::unpark_handle::UnparkObj;
 mod task_rc;
 mod data;
 #[allow(deprecated)]
 #[cfg(feature = "with-deprecated")]
 pub use self::task_rc::TaskRc;
 pub use self::data::LocalKey;
+pub use self::unpark_handle::UnparkHandle;
 
 struct BorrowedTask<'a> {
     id: usize,
