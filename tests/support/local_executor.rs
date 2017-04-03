@@ -13,7 +13,7 @@ use std::cell::RefCell;
 
 use futures::{Future, Async};
 
-use futures::executor::{self, Spawn};
+use futures::executor::{self, Spawn, UnparkHandle};
 
 /// Main loop object
 pub struct Core {
@@ -70,9 +70,9 @@ impl Core {
 
     fn turn(&mut self) {
         let task = self.unpark.recv().unwrap(); // Safe to unwrap because self.unpark_send keeps the channel alive
-        let unpark = Arc::new(Unpark { task: task, send: Mutex::new(self.unpark_send.clone()), });
+        let mut unpark = Unpark { task: task, send: Arc::new(Mutex::new(self.unpark_send.clone())), };
         let mut task = if let hash_map::Entry::Occupied(x) = self.live.entry(task) { x } else { return };
-        let result = task.get_mut().poll_future(unpark);
+        let result = task.get_mut().poll_future(UnparkHandle::new(&mut unpark));
         match result {
             Ok(Async::Ready(())) => { task.remove(); }
             Err(()) => { task.remove(); }
@@ -81,9 +81,10 @@ impl Core {
     }
 }
 
+#[derive(Clone)]
 struct Unpark {
     task: u64,
-    send: Mutex<mpsc::Sender<u64>>,
+    send: Arc<Mutex<mpsc::Sender<u64>>>,
 }
 
 impl executor::Unpark for Unpark {
