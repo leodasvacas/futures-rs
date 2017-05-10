@@ -374,6 +374,17 @@ impl<F: Future> Spawn<F> {
         }
     }
 
+    pub fn wait_future_old(&mut self) -> Result<F::Item, F::Error> {
+       let notify = Arc::new(ThreadUnpark::new(thread::current()));
+       let notify2 = NotifyHandle::from(notify.clone());
+        loop {
+            match try!(self.poll_future_notify(&notify2, 0)) {
+                Async::NotReady => notify.park(),
+                Async::Ready(e) => return Ok(e),
+            }
+        }
+    }
+    
     /// A specialized function to request running a future to completion on the
     /// specified executor.
     ///
