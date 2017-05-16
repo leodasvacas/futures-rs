@@ -450,9 +450,9 @@ impl<F: Future> Spawn<F> {
     /// This construction can avoid an unnecessary atomic reference count bump
     /// in some situations.
     pub fn poll_future_notify<T>(&mut self,
-                                 notify: &T,
+                                 notify: T,
                                  id: u64) -> Poll<F::Item, F::Error>
-        where T: Clone + Into<NotifyHandle>,
+        where T: Copy + Into<NotifyHandle>,
     {
         let mk = || notify.clone().into();
         self.enter(BorrowedUnpark::New(&mk, id), |f| f.poll())
@@ -518,10 +518,10 @@ impl<S: Stream> Spawn<S> {
 
     /// Like `poll_future_notify`, except polls the underlying stream.
     pub fn poll_stream_notify<T>(&mut self,
-                                 notify: &T,
+                                 notify: T,
                                  id: u64)
                                  -> Poll<Option<S::Item>, S::Error>
-        where T: Clone + Into<NotifyHandle>,
+        where T: Copy + Into<NotifyHandle>,
     {
         let mk = || notify.clone().into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.poll())
@@ -562,10 +562,10 @@ impl<S: Sink> Spawn<S> {
     /// attempted again.
     pub fn start_send_notify<T>(&mut self,
                                 value: S::SinkItem,
-                                notify: &T,
+                                notify: T,
                                 id: u64)
                                -> StartSend<S::SinkItem, S::SinkError>
-        where T: Clone + Into<NotifyHandle>,
+        where T: Copy + Into<NotifyHandle>,
     {
         let mk = || notify.clone().into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.start_send(value))
@@ -589,10 +589,10 @@ impl<S: Sink> Spawn<S> {
     /// passed in will receive a notification when the operation is ready to be
     /// attempted again.
     pub fn poll_flush_notify<T>(&mut self,
-                                notify: &T,
+                                notify: T,
                                 id: u64)
                                 -> Poll<(), S::SinkError>
-        where T: Clone + Into<NotifyHandle>,
+        where T: Copy + Into<NotifyHandle>,
     {
         let mk = || notify.clone().into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.poll_complete())
@@ -849,7 +849,7 @@ pub fn with_unpark_event<F, R>(event: UnparkEvent, f: F) -> R
     })
 }
 
-pub fn with_notify<F, T, R>(notify: &T, id: u64, f: F) -> R
+pub fn with_notify<F, T, R>(notify: T, id: u64, f: F) -> R
     where F: FnOnce() -> R,
           T: Clone + Into<NotifyHandle>,
 {
@@ -1087,6 +1087,12 @@ impl Drop for NotifyHandle {
     }
 }
 
+impl<'a> From<&'a NotifyHandle> for NotifyHandle {
+    fn from(me: &NotifyHandle) -> NotifyHandle {
+        me.clone()
+    }
+}
+
 // Safe implementation of `UnsafeNotify` for `Arc` in the standard library.
 //
 // Note that this is a very unsafe implementation! The crucial pieces is that
@@ -1136,7 +1142,7 @@ unsafe impl<T: Notify + 'static> UnsafeNotify for ArcWrapped<T> {
     unsafe fn clone_raw(&self) -> NotifyHandle {
         let me: *const ArcWrapped<T> = self;
         let arc = (*(&me as *const *const ArcWrapped<T> as *const Arc<T>)).clone();
-        NotifyHandle::from(arc)
+        NotifyHandle::from(&arc)
     }
 
     unsafe fn drop_raw(&self) {
@@ -1146,12 +1152,12 @@ unsafe impl<T: Notify + 'static> UnsafeNotify for ArcWrapped<T> {
     }
 }
 
-impl<T> From<Arc<T>> for NotifyHandle
+impl<'a, T> From<&'a Arc<T>> for NotifyHandle
     where T: Notify + 'static,
 {
-    fn from(rc: Arc<T>) -> NotifyHandle {
+    fn from(rc: &Arc<T>) -> NotifyHandle {
         unsafe {
-            let ptr = mem::transmute::<Arc<T>, *mut ArcWrapped<T>>(rc);
+            let ptr = mem::transmute::<Arc<T>, *mut ArcWrapped<T>>(rc.clone());
             NotifyHandle::new(ptr)
         }
     }

@@ -79,7 +79,7 @@ pub fn notify_panic() -> NotifyHandle {
         }
     }
 
-    NotifyHandle::from(Arc::new(Foo))
+    NotifyHandle::from(&Arc::new(Foo))
 }
 
 pub fn notify_noop() -> NotifyHandle {
@@ -89,7 +89,7 @@ pub fn notify_noop() -> NotifyHandle {
         fn notify(&self, _id: u64) {}
     }
 
-    NotifyHandle::from(Arc::new(Foo))
+    NotifyHandle::from(&Arc::new(Foo))
 }
 
 pub trait ForgetExt {

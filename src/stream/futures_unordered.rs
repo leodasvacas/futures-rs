@@ -457,12 +457,13 @@ impl<T> Clone for MyInner<T> {
     }
 }
 
-impl<T> From<MyInner<T>> for NotifyHandle {
-    fn from(me: MyInner<T>) -> NotifyHandle {
+impl<'a, T> From<&'a MyInner<T>> for NotifyHandle {
+    fn from(me: &MyInner<T>) -> NotifyHandle {
         unsafe {
-            let handle = NotifyHandle::new(hide_lt(me.0));
-            mem::forget(me);
-            return handle
+            let clone = me.clone();
+            let handle = NotifyHandle::new(hide_lt(clone.0));
+            mem::forget(clone);
+            handle
         }
     }
 }
