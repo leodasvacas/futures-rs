@@ -454,7 +454,7 @@ impl<F: Future> Spawn<F> {
                                  id: u64) -> Poll<F::Item, F::Error>
         where T: Copy + Into<NotifyHandle>,
     {
-        let mk = || notify.clone().into();
+        let mk = || notify.into();
         self.enter(BorrowedUnpark::New(&mk, id), |f| f.poll())
     }
 
@@ -523,7 +523,7 @@ impl<S: Stream> Spawn<S> {
                                  -> Poll<Option<S::Item>, S::Error>
         where T: Copy + Into<NotifyHandle>,
     {
-        let mk = || notify.clone().into();
+        let mk = || notify.into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.poll())
     }
 
@@ -567,7 +567,7 @@ impl<S: Sink> Spawn<S> {
                                -> StartSend<S::SinkItem, S::SinkError>
         where T: Copy + Into<NotifyHandle>,
     {
-        let mk = || notify.clone().into();
+        let mk = || notify.into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.start_send(value))
     }
 
@@ -594,7 +594,7 @@ impl<S: Sink> Spawn<S> {
                                 -> Poll<(), S::SinkError>
         where T: Copy + Into<NotifyHandle>,
     {
-        let mk = || notify.clone().into();
+        let mk = || notify.into();
         self.enter(BorrowedUnpark::New(&mk, id), |s| s.poll_complete())
     }
 
@@ -851,10 +851,10 @@ pub fn with_unpark_event<F, R>(event: UnparkEvent, f: F) -> R
 
 pub fn with_notify<F, T, R>(notify: T, id: u64, f: F) -> R
     where F: FnOnce() -> R,
-          T: Clone + Into<NotifyHandle>,
+          T: Copy + Into<NotifyHandle>,
 {
     with(|task| {
-        let mk = || notify.clone().into();
+        let mk = || notify.into();
         let new_task = BorrowedTask {
             id: task.id,
             unpark: BorrowedUnpark::New(&mk, id),
@@ -1141,8 +1141,8 @@ impl<T: Notify + 'static> Notify for ArcWrapped<T> {
 unsafe impl<T: Notify + 'static> UnsafeNotify for ArcWrapped<T> {
     unsafe fn clone_raw(&self) -> NotifyHandle {
         let me: *const ArcWrapped<T> = self;
-        let arc = (*(&me as *const *const ArcWrapped<T> as *const Arc<T>)).clone();
-        NotifyHandle::from(&arc)
+        let arc = &*(&me as *const *const ArcWrapped<T> as *const Arc<T>);
+        NotifyHandle::from(arc)
     }
 
     unsafe fn drop_raw(&self) {
